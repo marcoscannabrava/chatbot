@@ -1,20 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
-
-export interface Tool {
-  name: string;
-  description: string;
-  parameters: {
-    type: string;
-    properties: Record<string, any>;
-    required: string[];
-  };
-}
-
-export interface ToolCall {
-  name: string;
-  arguments: Record<string, any>;
-}
+import { generateText, jsonSchema } from 'ai';
+import { google } from '@ai-sdk/google';
+import { z } from 'zod';
 
 const FILES_DIR = path.join(process.cwd(), 'files');
 
@@ -56,146 +44,56 @@ export async function writeFile(filename: string, content: string): Promise<void
   }
 }
 
-// Tool definitions for the AI agent
-export const tools: Tool[] = [
-  {
-    name: 'read_file',
-    description: 'Read content from a file in the files directory',
-    parameters: {
-      type: 'object',
-      properties: {
-        filename: {
-          type: 'string',
-          description: 'The name of the file to read'
-        }
-      },
-      required: ['filename']
-    }
-  },
-  {
-    name: 'write_file',
-    description: 'Write content to a file in the files directory',
-    parameters: {
-      type: 'object',
-      properties: {
-        filename: {
-          type: 'string',
-          description: 'The name of the file to write'
-        },
-        content: {
-          type: 'string',
-          description: 'The content to write to the file'
-        }
-      },
-      required: ['filename', 'content']
-    }
-  }
-];
 
-export async function executeTool(toolCall: ToolCall): Promise<string> {
-  const { name, arguments: args } = toolCall;
-  
-  switch (name) {
-    case 'read_file':
-      try {
-        const content = await readFile(args.filename);
-        return `File content: ${content}`;
-      } catch (error) {
-        return `Error reading file: ${(error as Error).message}`;
-      }
-    
-    case 'write_file':
-      try {
-        await writeFile(args.filename, args.content);
-        return `Successfully wrote to file: ${args.filename}`;
-      } catch (error) {
-        return `Error writing file: ${(error as Error).message}`;
-      }
-    
-    default:
-      return `Unknown tool: ${name}`;
-  }
-}
 
-// Simple AI agent that can use tools
+// AI agent that uses AI SDK tools for file operations
 export class Agent {
-  private openai: any;
+  private model: any;
   
-  constructor(openaiClient: any) {
-    this.openai = openaiClient;
+  constructor() {
+    this.model = google(process.env.GOOGLE_MODEL || 'gemini-2.5-flash');
   }
   
   async processMessage(message: string): Promise<string> {
     try {
-      const response = await this.openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a helpful AI assistant with access to file tools. You can read and write files in the files directory. When a user asks to save something to a file or read from a file, use the appropriate tools.
-            
-            Available tools:
-            - read_file(filename): Read content from a file
-            - write_file(filename, content): Write content to a file
-            
-            Always be helpful and use tools when appropriate.`
-          },
-          {
-            role: 'user',
-            content: message
-          }
-        ],
-        tools: tools.map(tool => ({
-          type: 'function',
-          function: tool
-        })),
-        tool_choice: 'auto'
-      });
-      
-      const assistantMessage = response.choices[0].message;
-      
-      // Check if the assistant wants to use tools
-      if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-        let finalResponse = assistantMessage.content || '';
-        
-        for (const toolCall of assistantMessage.tool_calls) {
-          const toolResult = await executeTool({
-            name: toolCall.function.name,
-            arguments: JSON.parse(toolCall.function.arguments)
-          });
-          
-          // Get final response after tool execution
-          const followUpResponse = await this.openai.chat.completions.create({
-            model: 'gpt-3.5-turbo',
-            messages: [
-              {
-                role: 'system',
-                content: 'You are a helpful AI assistant. Provide a natural response based on the tool result.'
-              },
-              {
-                role: 'user',
-                content: message
-              },
-              {
-                role: 'assistant',
-                content: assistantMessage.content,
-                tool_calls: assistantMessage.tool_calls
-              },
-              {
-                role: 'tool',
-                tool_call_id: toolCall.id,
-                content: toolResult
+      const result = await generateText({
+        model: this.model,
+        system: 'You are a helpful AI assistant with access to file operations. You can read and write files in the files directory. Use the appropriate tools when users ask about file operations.',
+        prompt: message,
+        tools: {
+          readFile: {
+            description: 'Read the contents of a file from the files directory',
+            inputSchema: jsonSchema(z.object({
+              filename: z.string().describe('The name of the file to read')
+            })),
+            execute: async ({ filename }) => {
+              try {
+                const content = await readFile(filename);
+                return { success: true, content };
+              } catch (error) {
+                return { success: false, error: (error as Error).message };
               }
-            ]
-          });
-          
-          finalResponse = followUpResponse.choices[0].message.content || 'Tool executed successfully.';
+            }
+          },
+          writeFile: {
+            description: 'Write content to a file in the files directory',
+            inputSchema: jsonSchema(z.object({
+              filename: z.string().describe('The name of the file to write'),
+              content: z.string().describe('The content to write to the file')
+            })),
+            execute: async ({ filename, content }) => {
+              try {
+                await writeFile(filename, content);
+                return { success: true, message: `Successfully wrote content to ${filename}` };
+              } catch (error) {
+                return { success: false, error: (error as Error).message };
+              }
+            }
+          }
         }
-        
-        return finalResponse;
-      }
-      
-      return assistantMessage.content || 'I apologize, but I could not generate a response.';
+      });
+
+      return result.text;
       
     } catch (error) {
       console.error('Error processing message:', error);

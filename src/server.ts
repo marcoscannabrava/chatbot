@@ -1,6 +1,5 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
-import { OpenAI } from 'openai';
 import { SlackClient } from './slack';
 import { Agent } from './agent';
 
@@ -16,10 +15,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Initialize clients
 const slackClient = new SlackClient(process.env.SLACK_BOT_TOKEN!);
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!
-});
-const agent = new Agent(openai);
+const agent = new Agent();
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
@@ -120,7 +116,7 @@ app.listen(port, () => {
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   
   // Validate required environment variables
-  const requiredEnvVars = ['SLACK_BOT_TOKEN', 'SLACK_SIGNING_SECRET', 'OPENAI_API_KEY'];
+  const requiredEnvVars = ['SLACK_BOT_TOKEN', 'SLACK_SIGNING_SECRET', 'GOOGLE_GENERATIVE_AI_API_KEY'];
   const missingVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
   
   if (missingVars.length > 0) {
