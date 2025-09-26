@@ -1,9 +1,8 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import dotenv from 'dotenv';
 import { SlackClient } from './slack';
-import { Agent } from './agent';
+import { AiAgent } from './agent';
 
-// Load environment variables
 dotenv.config();
 
 const app: Express = express();
@@ -13,9 +12,9 @@ const port = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Initialize clients
-const slackClient = new SlackClient(process.env.SLACK_BOT_TOKEN!);
-const agent = new Agent();
+// clients
+const slack = new SlackClient(process.env.SLACK_BOT_TOKEN!);
+const agent = new AiAgent();
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
@@ -25,45 +24,34 @@ app.get('/health', (req: Request, res: Response) => {
 // Slack events endpoint
 app.post('/slack/events', async (req: Request, res: Response) => {
   try {
-    const { headers, body } = req;
+    const { headers, body: event } = req;
     const signature = headers['x-slack-signature'] as string;
     const timestamp = headers['x-slack-request-timestamp'] as string;
-    const rawBody = JSON.stringify(body);
+    const rawBody = JSON.stringify(event);
     
     // Verify the request is from Slack
-    if (!slackClient.verifySlackRequest(signature, timestamp, rawBody)) {
+    if (!slack.verifySlackRequest(signature, timestamp, rawBody)) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
-    
-    const event = body;
     
     // Handle URL verification challenge from Slack
     if (event.type === 'url_verification') {
       return res.json({ challenge: event.challenge });
     }
-    
-    // Handle message events
+
+    // Handle messages
     if (event.type === 'event_callback' && event.event) {
       const { type, channel, text, user, bot_id } = event.event;
-      
-      // Ignore bot messages and messages without text
       if (bot_id || !text || type !== 'message') {
         return res.status(200).json({ ok: true });
       }
-      
-      // Check if the bot is mentioned (you might want to adjust this logic)
-      const botUserId = process.env.SLACK_BOT_USER_ID;
-      if (!text.includes(`<@${botUserId}>`) && !text.toLowerCase().includes('bot')) {
-        return res.status(200).json({ ok: true });
-      }
-      
-      // Process the message with the AI agent
+            
       try {
         const response = await agent.processMessage(text);
-        await slackClient.sendMessage(channel, response);
+        await slack.sendMessage(channel, response);
       } catch (error) {
         console.error('Error processing message:', error);
-        await slackClient.sendMessage(channel, 'Sorry, I encountered an error processing your request.');
+        await slack.sendMessage(channel, 'Sorry, I encountered an error processing your request.');
       }
     }
     

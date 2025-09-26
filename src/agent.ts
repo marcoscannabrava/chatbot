@@ -47,7 +47,7 @@ export async function writeFile(filename: string, content: string): Promise<void
 
 
 // AI agent that uses AI SDK tools for file operations
-export class Agent {
+export class AiAgent {
   private model: any;
   
   constructor() {

@@ -41,9 +41,9 @@ Follow these steps to get the bot running locally.
 
 ### 1. Prerequisites
 
-*   Node.js 18+
-*   [pnpm](https://pnpm.io/) (a fast, disk space efficient package manager)
-*   A Slack App with a Bot Token and App-Level Token.
+- Node.js 18+
+- [pnpm](https://pnpm.io/) (a fast, disk space efficient package manager)
+- A Slack App with a Bot Token and App-Level Token.
 
 ```sh
 # Install dependencies
@@ -56,6 +56,9 @@ pnpm dev
 pnpm start
 ```
 
+### 2. Slack Setup
+- Start server and tunnel it via ngrok `ngrok http 3000`
+- Copy ngrok URL into: https://api.slack.com/apps/A09H0C78L2J/event-subscriptions
 
 ## Example Usage
 

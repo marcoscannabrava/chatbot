@@ -1,4 +1,4 @@
-import { readFile, writeFile, Agent } from './agent';
+import { readFile, writeFile, AiAgent } from './agent';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -65,14 +65,14 @@ describe('Agent Tools', () => {
 
 
   describe('Agent', () => {
-    let agent: Agent;
+    let agent: AiAgent;
 
     beforeEach(() => {
-      agent = new Agent();
+      agent = new AiAgent();
     });
 
     it('should create agent without parameters', () => {
-      expect(agent).toBeInstanceOf(Agent);
+      expect(agent).toBeInstanceOf(AiAgent);
     });
 
     it('should handle simple messages', async () => {
